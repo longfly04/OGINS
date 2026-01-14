@@ -83,3 +83,7 @@ imunoise:
 # 天线杆臂, IMU坐标系前右下方向
 # antenna lever, forward, right and down in the imu frame. [m]
 antlever:  [ 0.136, -0.301, -0.184 ]
+
+# 输出模式配置
+# output mode configuration
+output_mode: terminal           # 输出模式：file(文件保存)或terminal(终端显示)

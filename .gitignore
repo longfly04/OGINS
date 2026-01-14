@@ -3,3 +3,8 @@ lib/
 build/
 .idea/
 dataset/
+.trae/
+.vscode/
+result/
+script/
+

@@ -81,6 +81,18 @@ typedef struct GINSOptions {
     // install parameters
     Eigen::Vector3d antlever = {0, 0, 0};
 
+    // 串口配置
+    // serial port configuration
+    bool use_serial = false;
+    std::string imu_serial_port = "";
+    int imu_baudrate = 115200;
+    std::string gnss_serial_port = "";
+    int gnss_baudrate = 115200;
+
+    // 输出模式配置
+    // output mode configuration
+    std::string output_mode = "file"; // "file" 或 "terminal"
+
     void print_options() {
         std::cout << "---------------KF-GINS Options:---------------" << std::endl;
 
@@ -132,7 +144,19 @@ typedef struct GINSOptions {
 
         // 打印GNSS天线杆臂
         // print GNSS antenna leverarm
-        std::cout << " - Antenna leverarm: " << antlever.transpose() << " [m] " << std::endl << std::endl;
+        std::cout << " - Antenna leverarm: " << antlever.transpose() << " [m] " << std::endl;
+
+        // 打印串口配置
+        // print serial port configuration
+        std::cout << " - Serial Port Configuration: " << std::endl;
+        std::cout << '\t' << "- use serial: " << (use_serial ? "yes" : "no") << std::endl;
+        if (use_serial) {
+            std::cout << '\t' << "- IMU serial port: " << imu_serial_port << std::endl;
+            std::cout << '\t' << "- IMU baudrate: " << imu_baudrate << std::endl;
+            std::cout << '\t' << "- GNSS serial port: " << gnss_serial_port << std::endl;
+            std::cout << '\t' << "- GNSS baudrate: " << gnss_baudrate << std::endl;
+        }
+        std::cout << std::endl;
     }
 
 } GINSOptions;

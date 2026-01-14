@@ -18,6 +18,9 @@ file(GLOB_RECURSE SOURCE
         src/kf_gins.cpp
         src/fileio/fileloader.cc
         src/fileio/filesaver.cc
+        src/fileio/serialport.cpp
+        src/fileio/gnssserialloader.cpp
+        src/fileio/imuserialloader.cpp
         src/kf-gins/gi_engine.cpp
         src/kf-gins/insmech.cpp)
 

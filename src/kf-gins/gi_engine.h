@@ -24,6 +24,7 @@
 #define GI_ENGINE_H
 
 #include <Eigen/Dense>
+#include <functional>
 #include <vector>
 
 #include "common/types.h"
@@ -33,9 +34,36 @@
 class GIEngine {
 
 public:
+    // 故障类型枚举
+    // fault type enum
+    enum FaultType {
+        FAULT_NONE = 0,
+        FAULT_IMU_LOST,
+        FAULT_GNSS_LOST
+    };
+
+    // 故障级别枚举
+    // fault level enum
+    enum FaultLevel {
+        LEVEL_INFO = 0,
+        LEVEL_WARNING,
+        LEVEL_ERROR,
+        LEVEL_FATAL
+    };
+
     explicit GIEngine(GINSOptions &options);
 
     ~GIEngine() = default;
+
+    // 回调函数类型
+    // callback function type
+    using NavResultCallback = std::function<void(double, const NavState&, const Eigen::MatrixXd&)>;
+
+    // 设置回调函数
+    // set callback function
+    void setNavResultCallback(NavResultCallback callback) {
+        nav_result_callback_ = callback;
+    }
 
     /**
      * @brief 添加新的IMU数据，(不)补偿IMU误差
@@ -53,6 +81,23 @@ public:
         if (compensate) {
             imuCompensate(imucur_);
         }
+        
+        // 检查IMU信号丢失
+        // check IMU signal loss
+        if (last_imu_time_ > 0) {
+            double imu_time_diff = imucur_.time - last_imu_time_;
+            if (imu_time_diff > IMU_TIMEOUT_THRESHOLD) {
+                imu_lost_ = true;
+                char buffer[128];
+                sprintf_s(buffer, sizeof(buffer), "IMU signal lost at %.3f! Time diff: %.3fs", timestamp_, imu_time_diff);
+                reportFault(FAULT_IMU_LOST, LEVEL_ERROR, buffer);
+            } else if (imu_lost_) {
+                imu_lost_ = false;
+                reportFault(FAULT_IMU_LOST, LEVEL_INFO, "IMU signal recovered");
+            }
+        }
+        
+        last_imu_time_ = imucur_.time;
     }
 
     /**
@@ -67,6 +112,19 @@ public:
         // 暂不进行数据有效性检查，GNSS数据默认有效
         // do not check the validity of gnssdata, the gnssdata is valid by default
         gnssdata_.isvalid = true;
+        
+        // 更新最后一次有效GNSS时间
+        // update last valid GNSS time
+        gnss_last_valid_time_ = gnss.time;
+        
+        // 如果之前GNSS信号丢失，重置标志
+        // reset GNSS lost flag if it was lost before
+        if (gnss_lost_) {
+            gnss_lost_ = false;
+            reportFault(FAULT_GNSS_LOST, LEVEL_INFO, "GNSS signal recovered");
+        }
+        
+        gnss_lost_time_ = 0.0;
     }
 
     /**
@@ -125,6 +183,42 @@ public:
      * */
     Eigen::MatrixXd getCovariance() {
         return Cov_;
+    }
+    
+    /**
+     * @brief 检查IMU信号状态
+     *        check IMU signal status
+     * */
+    void checkImuSignal();
+    
+    /**
+     * @brief 检查GNSS信号状态
+     *        check GNSS signal status
+     * */
+    void checkGnssSignal();
+    
+    /**
+     * @brief 报告故障信息
+     *        report fault information
+     * @param [in] fault_type 故障类型
+     *                        fault type
+     * @param [in] fault_level 故障级别
+     *                        fault level
+     * @param [in] message 故障信息
+     *                     fault message
+     * */
+    void reportFault(FaultType fault_type, FaultLevel fault_level, const std::string &message);
+    
+    /**
+     * @brief 获取当前故障状态
+     *        get current fault status
+     * @return 当前故障类型
+     *         current fault type
+     * */
+    FaultType getFaultStatus() const {
+        if (imu_lost_) return FAULT_IMU_LOST;
+        if (gnss_lost_) return FAULT_GNSS_LOST;
+        return FAULT_NONE;
     }
 
 private:
@@ -233,6 +327,14 @@ private:
     // 更新时间对齐误差，IMU状态和观测信息误差小于它则认为两者对齐
     // updata time align error
     const double TIME_ALIGN_ERR = 0.001;
+    
+    // IMU超时阈值（秒）
+    // IMU timeout threshold (seconds)
+    const double IMU_TIMEOUT_THRESHOLD = 1.0;
+    
+    // GNSS超时阈值（秒）
+    // GNSS timeout threshold (seconds)
+    const double GNSS_TIMEOUT_THRESHOLD = 5.0;
 
     // IMU和GNSS原始数据
     // raw imudata and gnssdata
@@ -252,6 +354,10 @@ private:
     Eigen::MatrixXd Qc_;
     Eigen::MatrixXd dx_;
 
+    // 导航结果回调函数
+    // navigation result callback function
+    NavResultCallback nav_result_callback_;
+
     const int RANK      = 21;
     const int NOISERANK = 18;
 
@@ -259,6 +365,14 @@ private:
     // state ID and noise ID
     enum StateID { P_ID = 0, V_ID = 3, PHI_ID = 6, BG_ID = 9, BA_ID = 12, SG_ID = 15, SA_ID = 18 };
     enum NoiseID { VRW_ID = 0, ARW_ID = 3, BGSTD_ID = 6, BASTD_ID = 9, SGSTD_ID = 12, SASTD_ID = 15 };
+    
+    // 信号丢失检测相关
+    // signal loss detection related
+    bool imu_lost_;                    // IMU信号丢失标志
+    bool gnss_lost_;                   // GNSS信号丢失标志
+    double gnss_last_valid_time_;      // 最后一次有效GNSS时间
+    double gnss_lost_time_;            // GNSS信号丢失时长
+    double last_imu_time_;             // 上一次IMU数据时间
 };
 
 #endif // GI_ENGINE_H

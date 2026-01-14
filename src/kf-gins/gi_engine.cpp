@@ -58,6 +58,14 @@ GIEngine::GIEngine(GINSOptions &options) {
     // 设置系统状态(位置、速度、姿态和IMU误差)初值和初始协方差
     // set initial state (position, velocity, attitude and IMU error) and covariance
     initialize(options_.initstate, options_.initstate_std);
+    
+    // 初始化信号丢失检测相关变量
+    // initialize signal loss detection variables
+    imu_lost_ = false;
+    gnss_lost_ = false;
+    gnss_last_valid_time_ = 0.0;
+    gnss_lost_time_ = 0.0;
+    last_imu_time_ = 0.0;
 }
 
 void GIEngine::initialize(const NavState &initstate, const NavState &initstate_std) {
@@ -147,6 +155,17 @@ void GIEngine::newImuProcess() {
     // 检查协方差矩阵对角线元素
     // check diagonal elements of current covariance matrix
     checkCov();
+    
+    // 检查IMU和GNSS信号状态
+    // check IMU and GNSS signal status
+    checkImuSignal();
+    checkGnssSignal();
+
+    // 调用回调函数，返回导航结果
+    // call callback function to return navigation result
+    if (nav_result_callback_) {
+        nav_result_callback_(timestamp_, getNavState(), Cov_);
+    }
 
     // 更新上一时刻的状态和IMU数据
     // update system state and imudata at the previous epoch
@@ -246,7 +265,7 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
     temp(1, 1)                  = (pvapre_.vel[2] + pvapre_.vel[0] * tan(pvapre_.pos[0])) / rnh;
     temp(1, 2)                  = 2 * WGS84_WIE * cos(pvapre_.pos[0]) + pvapre_.vel[1] / rnh;
     temp(2, 0)                  = -2 * pvapre_.vel[0] / rmh;
-    temp(2, 1)                  = -2 * (WGS84_WIE * cos(pvapre_.pos(0)) + pvapre_.vel[1] / rnh);
+    temp(2, 1)                  = -2 * (WGS84_WIE * cos(pvapre_.pos[0]) + pvapre_.vel[1] / rnh);
     F.block(V_ID, V_ID, 3, 3)   = temp;
     F.block(V_ID, PHI_ID, 3, 3) = Rotation::skewSymmetric(pvapre_.att.cbn * accel);
     F.block(V_ID, BA_ID, 3, 3)  = pvapre_.att.cbn;
@@ -447,4 +466,98 @@ NavState GIEngine::getNavState() {
     state.imuerror = imuerror_;
 
     return state;
+}
+
+void GIEngine::checkImuSignal() {
+    // IMU信号检查在addImuData()中已经实现
+    // IMU signal check is already implemented in addImuData()
+}
+
+void GIEngine::checkGnssSignal() {
+    // 如果还没有收到过有效GNSS数据，跳过检查
+    // skip check if no valid GNSS data has been received yet
+    if (gnss_last_valid_time_ <= 0) {
+        return;
+    }
+    
+    // 更新GNSS信号丢失时长
+    // update GNSS signal lost time
+    gnss_lost_time_ = timestamp_ - gnss_last_valid_time_;
+    
+    // 检查GNSS信号是否丢失
+    // check if GNSS signal is lost
+    if (gnss_lost_time_ > GNSS_TIMEOUT_THRESHOLD) {
+        if (!gnss_lost_) {
+            gnss_lost_ = true;
+            char buffer[128];
+            sprintf_s(buffer, sizeof(buffer), "GNSS signal lost at %.3f!", timestamp_);
+            reportFault(FAULT_GNSS_LOST, LEVEL_WARNING, buffer);
+        } else {
+            // 定期报告GNSS信号丢失状态和时长
+            // periodically report GNSS signal lost status and duration
+            static double last_report_time = 0;
+            if (timestamp_ - last_report_time > 1.0) { // 每秒报告一次
+                last_report_time = timestamp_;
+                char buffer[128];
+                sprintf_s(buffer, sizeof(buffer), "GNSS signal lost for %.3fs", gnss_lost_time_);
+                reportFault(FAULT_GNSS_LOST, LEVEL_INFO, buffer);
+            }
+        }
+    }
+}
+
+void GIEngine::reportFault(FaultType fault_type, FaultLevel fault_level, const std::string &message) {
+    // 根据故障级别设置输出颜色
+    // set output color based on fault level
+    const char* color_start = "";
+    const char* color_end = "\033[0m";
+    
+    switch (fault_level) {
+        case LEVEL_INFO:
+            color_start = "\033[32m";
+            break;
+        case LEVEL_WARNING:
+            color_start = "\033[33m";
+            break;
+        case LEVEL_ERROR:
+            color_start = "\033[31m";
+            break;
+        case LEVEL_FATAL:
+            color_start = "\033[31;1m";
+            break;
+        default:
+            break;
+    }
+    
+    // 输出故障信息
+    // output fault information
+    std::cout << color_start << "[KF-GINS] " << "[";
+    
+    // 输出故障级别
+    // output fault level
+    switch (fault_level) {
+        case LEVEL_INFO:
+            std::cout << "INFO";
+            break;
+        case LEVEL_WARNING:
+            std::cout << "WARNING";
+            break;
+        case LEVEL_ERROR:
+            std::cout << "ERROR";
+            break;
+        case LEVEL_FATAL:
+            std::cout << "FATAL";
+            break;
+        default:
+            std::cout << "UNKNOWN";
+            break;
+    }
+    
+    std::cout << "] " << message << color_end << std::endl;
+    
+    // 如果是致命错误，终止程序
+    // terminate program if fatal error
+    if (fault_level == LEVEL_FATAL) {
+        std::exit(EXIT_FAILURE);
+    }
 }

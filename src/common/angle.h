@@ -38,11 +38,11 @@ public:
     }
 
     static float rad2deg(float rad) {
-        return rad * R2D;
+        return static_cast<float>(rad * R2D);
     }
 
     static float deg2rad(float deg) {
-        return deg * D2R;
+        return static_cast<float>(deg * D2R);
     }
 
     template <typename T, int Rows, int Cols>
