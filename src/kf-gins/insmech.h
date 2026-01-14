@@ -30,6 +30,15 @@
 class INSMech {
 
 public:
+    // 地理参数结构体，用于缓存和传递地理参数
+    // Geographic parameters struct, used for caching and passing geographic parameters
+    struct GeoParams {
+        Eigen::Vector2d rmrn;      // 子午圈半径和卯酉圈半径
+        Eigen::Vector3d wie_n;     // 地球自转角速度投影到n系
+        Eigen::Vector3d wen_n;     // n系相对于e系转动角速度投影到n系
+        double gravity;            // 重力值
+    };
+    
     /**
      * @brief INS机械编排算法, 利用IMU数据进行速度、位置和姿态更新
      *        INS Mechanization, update velocity, position and attitude using imudata
@@ -46,19 +55,19 @@ private:
      * @breif 位置更新
      *        position update
      * */
-    static void posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur);
+    static void posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams);
 
     /**
      * @breif 速度更新
      *        velocity update
      * */
-    static void velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur);
+    static void velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams);
 
     /**
      * @breif 姿态更新
      *        attitude update
      * */
-    static void attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur);
+    static void attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams);
 };
 
 #endif // INSMECH_H

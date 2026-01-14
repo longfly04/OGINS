@@ -10,8 +10,16 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_definitions( -D_USE_MATH_DEFINES=True)
     add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
     add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    # 添加性能分析选项
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG /PROFILE")
 else()
-    set(CMAKE_CXX_FLAGS "-Wno-unused-result")
+    # 添加性能分析选项
+    set(CMAKE_CXX_FLAGS "-Wno-unused-result -g -O2")
+    # 支持火焰图生成
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+    # 支持gprof分析
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
 endif()
 
 file(GLOB_RECURSE SOURCE

@@ -81,12 +81,12 @@ def plot_2d_trajectory(lon, lat, alt, output_path=None, show=False):
     
     # 添加颜色条
     cbar = plt.colorbar()
-    cbar.set_label('高程（米）', fontsize=12)
+    cbar.set_label('height (m)', fontsize=12)
     
     # 设置标题和标签
-    plt.title('KF-GINS 2D导航轨迹', fontsize=14)
-    plt.xlabel('经度（度）', fontsize=12)
-    plt.ylabel('纬度（度）', fontsize=12)
+    plt.title('KF-GINS 2D nav trajectory', fontsize=14)
+    plt.xlabel('lon (deg)', fontsize=12)
+    plt.ylabel('lat (deg)', fontsize=12)
     
     # 设置坐标轴刻度
     plt.xticks(fontsize=10)
@@ -126,13 +126,13 @@ def plot_3d_trajectory(lon, lat, alt, output_path=None, show=False):
     
     # 添加颜色条
     cbar = fig.colorbar(sc)
-    cbar.set_label('高程（米）', fontsize=12)
+    cbar.set_label('height (m)', fontsize=12)
     
     # 设置标题和标签
-    ax.set_title('KF-GINS 3D导航轨迹', fontsize=14)
-    ax.set_xlabel('经度（度）', fontsize=12)
-    ax.set_ylabel('纬度（度）', fontsize=12)
-    ax.set_zlabel('高程（米）', fontsize=12)
+    ax.set_title('KF-GINS 3D nav trajectory', fontsize=14)
+    ax.set_xlabel('lon (deg)', fontsize=12)
+    ax.set_ylabel('lat (deg)', fontsize=12)
+    ax.set_zlabel('height (m)', fontsize=12)
     
     # 设置坐标轴刻度
     ax.tick_params(axis='both', which='major', labelsize=10)
@@ -167,9 +167,9 @@ def plot_altitude_profile(time, alt, output_path=None, show=False):
     plt.plot(time, alt, 'b-', linewidth=1.5, alpha=0.8)
     
     # 设置标题和标签
-    plt.title('KF-GINS 高程剖面', fontsize=14)
-    plt.xlabel('时间（秒）', fontsize=12)
-    plt.ylabel('高程（米）', fontsize=12)
+    plt.title('KF-GINS altitude profile', fontsize=14)
+    plt.xlabel('time (s)', fontsize=12)
+    plt.ylabel('height (m)', fontsize=12)
     
     # 设置坐标轴刻度
     plt.xticks(fontsize=10)
@@ -202,14 +202,14 @@ def plot_velocity_profile(time, vel, output_path=None, show=False):
     plt.figure(figsize=(10, 6))
     
     # 绘制速度分量
-    plt.plot(time, vel[:, 0], 'r-', linewidth=1.5, alpha=0.8, label='北向速度')
-    plt.plot(time, vel[:, 1], 'g-', linewidth=1.5, alpha=0.8, label='东向速度')
-    plt.plot(time, vel[:, 2], 'b-', linewidth=1.5, alpha=0.8, label='垂向速度')
+    plt.plot(time, vel[:, 0], 'r-', linewidth=1.5, alpha=0.8, label='north velocity')
+    plt.plot(time, vel[:, 1], 'g-', linewidth=1.5, alpha=0.8, label='east velocity')
+    plt.plot(time, vel[:, 2], 'b-', linewidth=1.5, alpha=0.8, label='vertical velocity')
     
     # 设置标题和标签
-    plt.title('KF-GINS 速度剖面', fontsize=14)
-    plt.xlabel('时间（秒）', fontsize=12)
-    plt.ylabel('速度（米/秒）', fontsize=12)
+    plt.title('KF-GINS velocity profile', fontsize=14)
+    plt.xlabel('time (s)', fontsize=12)
+    plt.ylabel('velocity (m/s)', fontsize=12)
     
     # 设置坐标轴刻度
     plt.xticks(fontsize=10)

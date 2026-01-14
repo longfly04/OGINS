@@ -40,6 +40,17 @@ GIEngine::GIEngine(GINSOptions &options) {
     Cov_.setZero();
     Qc_.setZero();
     dx_.setZero();
+    
+    // 预分配矩阵，避免重复内存操作
+    // pre-allocate matrices to avoid repeated memory operations
+    Phi_.resize(RANK, RANK);
+    F_.resize(RANK, RANK);
+    Qd_.resize(RANK, RANK);
+    G_.resize(RANK, NOISERANK);
+    Phi_.setZero();
+    F_.setZero();
+    Qd_.setZero();
+    G_.setZero();
 
     // 初始化系统噪声阵
     // initialize noise matrix
@@ -200,18 +211,12 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
 
     // 系统噪声传播，姿态误差采用phi角误差模型
     // system noise propagate, phi-angle error model for attitude error
-    Eigen::MatrixXd Phi, F, Qd, G;
-
-    // 初始化Phi阵(状态转移矩阵)，F阵，Qd阵(传播噪声阵)，G阵(噪声驱动阵)
-    // initialize Phi (state transition), F matrix, Qd(propagation noise) and G(noise driven) matrix
-    Phi.resizeLike(Cov_);
-    F.resizeLike(Cov_);
-    Qd.resizeLike(Cov_);
-    G.resize(RANK, NOISERANK);
-    Phi.setIdentity();
-    F.setZero();
-    Qd.setZero();
-    G.setZero();
+    // 使用预分配的矩阵，避免重复内存操作
+    // use pre-allocated matrices to avoid repeated memory operations
+    Phi_.setIdentity();
+    F_.setZero();
+    Qd_.setZero();
+    G_.setZero();
 
     // 使用上一历元状态计算状态转移矩阵
     // compute state transition matrix using the previous state
@@ -241,8 +246,8 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
     temp(1, 0)                = pvapre_.vel[1] * tan(pvapre_.pos[0]) / rnh;
     temp(1, 1)                = -(pvapre_.vel[2] + pvapre_.vel[0] * tan(pvapre_.pos[0])) / rnh;
     temp(1, 2)                = pvapre_.vel[1] / rnh;
-    F.block(P_ID, P_ID, 3, 3) = temp;
-    F.block(P_ID, V_ID, 3, 3) = Eigen::Matrix3d::Identity();
+    F_.block(P_ID, P_ID, 3, 3) = temp;
+    F_.block(P_ID, V_ID, 3, 3) = Eigen::Matrix3d::Identity();
 
     // 速度误差
     // velocity error
@@ -256,7 +261,7 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
     temp(2, 0) = 2 * WGS84_WIE * pvapre_.vel[1] * sin(pvapre_.pos[0]) / rmh;
     temp(2, 2) = -pow(pvapre_.vel[1], 2) / rnh / rnh - pow(pvapre_.vel[0], 2) / rmh / rmh +
                  2 * gravity / (sqrt(rmrn[0] * rmrn[1]) + pvapre_.pos[2]);
-    F.block(V_ID, P_ID, 3, 3) = temp;
+    F_.block(V_ID, P_ID, 3, 3) = temp;
     temp.setZero();
     temp(0, 0)                  = pvapre_.vel[2] / rmh;
     temp(0, 1)                  = -2 * (WGS84_WIE * sin(pvapre_.pos[0]) + pvapre_.vel[1] * tan(pvapre_.pos[0]) / rnh);
@@ -266,10 +271,10 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
     temp(1, 2)                  = 2 * WGS84_WIE * cos(pvapre_.pos[0]) + pvapre_.vel[1] / rnh;
     temp(2, 0)                  = -2 * pvapre_.vel[0] / rmh;
     temp(2, 1)                  = -2 * (WGS84_WIE * cos(pvapre_.pos[0]) + pvapre_.vel[1] / rnh);
-    F.block(V_ID, V_ID, 3, 3)   = temp;
-    F.block(V_ID, PHI_ID, 3, 3) = Rotation::skewSymmetric(pvapre_.att.cbn * accel);
-    F.block(V_ID, BA_ID, 3, 3)  = pvapre_.att.cbn;
-    F.block(V_ID, SA_ID, 3, 3)  = pvapre_.att.cbn * (accel.asDiagonal());
+    F_.block(V_ID, V_ID, 3, 3)   = temp;
+    F_.block(V_ID, PHI_ID, 3, 3) = Rotation::skewSymmetric(pvapre_.att.cbn * accel);
+    F_.block(V_ID, BA_ID, 3, 3)  = pvapre_.att.cbn;
+    F_.block(V_ID, SA_ID, 3, 3)  = pvapre_.att.cbn * (accel.asDiagonal());
 
     // 姿态误差
     // attitude error
@@ -279,45 +284,45 @@ void GIEngine::insPropagation(IMU &imupre, IMU &imucur) {
     temp(1, 2) = -pvapre_.vel[0] / rmh / rmh;
     temp(2, 0) = -WGS84_WIE * cos(pvapre_.pos[0]) / rmh - pvapre_.vel[1] / rmh / rnh / pow(cos(pvapre_.pos[0]), 2);
     temp(2, 2) = -pvapre_.vel[1] * tan(pvapre_.pos[0]) / rnh / rnh;
-    F.block(PHI_ID, P_ID, 3, 3) = temp;
+    F_.block(PHI_ID, P_ID, 3, 3) = temp;
     temp.setZero();
     temp(0, 1)                    = 1 / rnh;
     temp(1, 0)                    = -1 / rmh;
     temp(2, 1)                    = -tan(pvapre_.pos[0]) / rnh;
-    F.block(PHI_ID, V_ID, 3, 3)   = temp;
-    F.block(PHI_ID, PHI_ID, 3, 3) = -Rotation::skewSymmetric(wie_n + wen_n);
-    F.block(PHI_ID, BG_ID, 3, 3)  = -pvapre_.att.cbn;
-    F.block(PHI_ID, SG_ID, 3, 3)  = -pvapre_.att.cbn * (omega.asDiagonal());
+    F_.block(PHI_ID, V_ID, 3, 3)   = temp;
+    F_.block(PHI_ID, PHI_ID, 3, 3) = -Rotation::skewSymmetric(wie_n + wen_n);
+    F_.block(PHI_ID, BG_ID, 3, 3)  = -pvapre_.att.cbn;
+    F_.block(PHI_ID, SG_ID, 3, 3)  = -pvapre_.att.cbn * (omega.asDiagonal());
 
     // IMU零偏误差和比例因子误差，建模成一阶高斯-马尔科夫过程
     // imu bias error and scale error, modeled as the first-order Gauss-Markov process
-    F.block(BG_ID, BG_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
-    F.block(BA_ID, BA_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
-    F.block(SG_ID, SG_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
-    F.block(SA_ID, SA_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
+    F_.block(BG_ID, BG_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
+    F_.block(BA_ID, BA_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
+    F_.block(SG_ID, SG_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
+    F_.block(SA_ID, SA_ID, 3, 3) = -1 / options_.imunoise.corr_time * Eigen::Matrix3d::Identity();
 
     // 系统噪声驱动矩阵
     // system noise driven matrix
-    G.block(V_ID, VRW_ID, 3, 3)    = pvapre_.att.cbn;
-    G.block(PHI_ID, ARW_ID, 3, 3)  = pvapre_.att.cbn;
-    G.block(BG_ID, BGSTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
-    G.block(BA_ID, BASTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
-    G.block(SG_ID, SGSTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
-    G.block(SA_ID, SASTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
+    G_.block(V_ID, VRW_ID, 3, 3)    = pvapre_.att.cbn;
+    G_.block(PHI_ID, ARW_ID, 3, 3)  = pvapre_.att.cbn;
+    G_.block(BG_ID, BGSTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
+    G_.block(BA_ID, BASTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
+    G_.block(SG_ID, SGSTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
+    G_.block(SA_ID, SASTD_ID, 3, 3) = Eigen::Matrix3d::Identity();
 
     // 状态转移矩阵
     // compute the state transition matrix
-    Phi.setIdentity();
-    Phi = Phi + F * imucur.dt;
+    Phi_ = Phi_ + F_ * imucur.dt;
 
-    // 计算系统传播噪声
-    // compute system propagation noise
-    Qd = G * Qc_ * G.transpose() * imucur.dt;
-    Qd = (Phi * Qd * Phi.transpose() + Qd) / 2;
+    // 计算系统传播噪声，优化矩阵乘法顺序，减少计算量
+    // compute system propagation noise, optimize matrix multiplication order to reduce computation
+    Qd_ = G_ * Qc_ * imucur.dt;
+    Qd_ = Qd_ * G_.transpose();
+    Qd_ = (Phi_ * Qd_ * Phi_.transpose() + Qd_) / 2;
 
     // EKF预测传播系统协方差和系统误差状态
     // do EKF predict to propagate covariance and error state
-    EKFPredict(Phi, Qd);
+    EKFPredict(Phi_, Qd_);
 }
 
 void GIEngine::gnssUpdate(GNSS &gnssdata) {

@@ -10,7 +10,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}/bin/KF-GINS",
-            "args": ["./dataset/kf-gins.yaml"],
+            "args": ["--file","./dataset/KF_GINS_Navresult.nav","--output","./output/result.png"],
             "stopAtEntry": true,
             "environment": [],
             "console": "integratedTerminal"

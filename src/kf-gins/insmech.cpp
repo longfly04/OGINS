@@ -26,31 +26,29 @@
 #include "insmech.h"
 
 void INSMech::insMech(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur) {
+    // 计算地理参数，只计算一次
+    // Calculate geographic parameters once
+    GeoParams geoparams;
+    geoparams.rmrn = Earth::meridianPrimeVerticalRadius(pvapre.pos[0]);
+    geoparams.wie_n << WGS84_WIE * cos(pvapre.pos[0]), 0, -WGS84_WIE * sin(pvapre.pos[0]);
+    geoparams.wen_n << pvapre.vel[1] / (geoparams.rmrn[1] + pvapre.pos[2]),
+                      -pvapre.vel[0] / (geoparams.rmrn[0] + pvapre.pos[2]),
+                      -pvapre.vel[1] * tan(pvapre.pos[0]) / (geoparams.rmrn[1] + pvapre.pos[2]);
+    geoparams.gravity = Earth::gravity(pvapre.pos);
 
     // perform velocity update, position updata and attitude update in sequence, irreversible order
     // 依次进行速度更新、位置更新、姿态更新, 不可调换顺序
-    velUpdate(pvapre, pvacur, imupre, imucur);
-    posUpdate(pvapre, pvacur, imupre, imucur);
-    attUpdate(pvapre, pvacur, imupre, imucur);
+    velUpdate(pvapre, pvacur, imupre, imucur, geoparams);
+    posUpdate(pvapre, pvacur, imupre, imucur, geoparams);
+    attUpdate(pvapre, pvacur, imupre, imucur, geoparams);
 }
 
-void INSMech::velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur) {
+void INSMech::velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams) {
 
     Eigen::Vector3d d_vfb, d_vfn, d_vgn, gl, midvel, midpos;
     Eigen::Vector3d temp1, temp2, temp3;
     Eigen::Matrix3d cnn, I33 = Eigen::Matrix3d::Identity();
     Eigen::Quaterniond qne, qee, qnn, qbb, q1, q2;
-
-    // 计算地理参数，子午圈半径和卯酉圈半径，地球自转角速度投影到n系, n系相对于e系转动角速度投影到n系，重力值
-    // calculate geographic parameters, Meridian and Mao unitary radii,
-    // earth rotational angular velocity projected to n-frame,
-    // rotational angular velocity of n-frame to e-frame projected to n-frame, and gravity
-    Eigen::Vector2d rmrn = Earth::meridianPrimeVerticalRadius(pvapre.pos(0));
-    Eigen::Vector3d wie_n, wen_n;
-    wie_n << WGS84_WIE * cos(pvapre.pos[0]), 0, -WGS84_WIE * sin(pvapre.pos[0]);
-    wen_n << pvapre.vel[1] / (rmrn[1] + pvapre.pos[2]), -pvapre.vel[0] / (rmrn[0] + pvapre.pos[2]),
-        -pvapre.vel[1] * tan(pvapre.pos[0]) / (rmrn[1] + pvapre.pos[2]);
-    double gravity = Earth::gravity(pvapre.pos);
 
     // 旋转效应和双子样划桨效应(基于相同采样间隔推导)
     // rotational and sculling motion (derived under uniform sampling)
@@ -64,14 +62,14 @@ void INSMech::velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
 
     // 比力积分项投影到n系
     // velocity increment dut to the specfic force projected to the n-frame
-    temp1 = (wie_n + wen_n) * imucur.dt / 2;
+    temp1 = (geoparams.wie_n + geoparams.wen_n) * imucur.dt / 2;
     cnn   = I33 - Rotation::skewSymmetric(temp1);
     d_vfn = cnn * pvapre.att.cbn * d_vfb;
 
     // 计算重力/哥式积分项
     // velocity increment due to the gravity and Coriolis force
-    gl << 0, 0, gravity;
-    d_vgn = (gl - (2 * wie_n + wen_n).cross(pvapre.vel)) * imucur.dt;
+    gl << 0, 0, geoparams.gravity;
+    d_vgn = (gl - (2 * geoparams.wie_n + geoparams.wen_n).cross(pvapre.vel)) * imucur.dt;
 
     // 得到中间时刻速度
     // velocity at k-1/2
@@ -89,7 +87,8 @@ void INSMech::velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
 
     // 重新计算中间时刻的rmrn, wie_e, wen_n
     // recompute rmrn, wie_n, and wen_n at k-1/2
-    rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
+    Eigen::Vector2d rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
+    Eigen::Vector3d wie_n, wen_n;
     wie_n << WGS84_WIE * cos(midpos[0]), 0, -WGS84_WIE * sin(midpos[0]);
     wen_n << midvel[1] / (rmrn[1] + midpos[2]), -midvel[0] / (rmrn[0] + midpos[2]),
         -midvel[1] * tan(midpos[0]) / (rmrn[1] + midpos[2]);
@@ -110,7 +109,7 @@ void INSMech::velUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
     pvacur.vel = pvapre.vel + d_vfn + d_vgn;
 }
 
-void INSMech::posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur) {
+void INSMech::posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams) {
 
     Eigen::Vector3d temp1, temp2, midvel, midpos;
     Eigen::Quaterniond qne, qee, qnn;
@@ -122,9 +121,8 @@ void INSMech::posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
 
     // 重新计算中间时刻地理参数
     // recompute rmrn, wie_n, wen_n at k-1/2
-    Eigen::Vector2d rmrn;
+    Eigen::Vector2d rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
     Eigen::Vector3d wie_n, wen_n;
-    rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
     wie_n << WGS84_WIE * cos(midpos[0]), 0, -WGS84_WIE * sin(midpos[0]);
     wen_n << midvel[1] / (rmrn[1] + midpos[2]), -midvel[0] / (rmrn[0] + midpos[2]),
         -midvel[1] * tan(midpos[0]) / (rmrn[1] + midpos[2]);
@@ -146,7 +144,7 @@ void INSMech::posUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
     pvacur.pos    = Earth::blh(qne, pvacur.pos[2]);
 }
 
-void INSMech::attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur) {
+void INSMech::attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const IMU &imucur, const GeoParams &geoparams) {
 
     Eigen::Quaterniond qne_pre, qne_cur, qne_mid, qnn, qee, qbb;
     Eigen::Vector3d temp1, midpos, midvel;
@@ -165,9 +163,8 @@ void INSMech::attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
 
     // 重新计算中间时刻地理参数
     // recompute rmrn, wie_n, wen_n at k-1/2
-    Eigen::Vector2d rmrn;
+    Eigen::Vector2d rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
     Eigen::Vector3d wie_n, wen_n;
-    rmrn = Earth::meridianPrimeVerticalRadius(midpos[0]);
     wie_n << WGS84_WIE * cos(midpos[0]), 0, -WGS84_WIE * sin(midpos[0]);
     wen_n << midvel[1] / (rmrn[1] + midpos[2]), -midvel[0] / (rmrn[0] + midpos[2]),
         -midvel[1] * tan(midpos[0]) / (rmrn[1] + midpos[2]);
@@ -187,5 +184,5 @@ void INSMech::attUpdate(const PVA &pvapre, PVA &pvacur, const IMU &imupre, const
     // attitude update finish
     pvacur.att.qbn   = (qnn * pvapre.att.qbn * qbb).normalized();
     pvacur.att.cbn   = Rotation::quaternion2matrix(pvacur.att.qbn);
-    pvacur.att.euler = Rotation::matrix2euler(pvacur.att.cbn);
+    pvacur.att.euler = Rotation::quaternion2euler(pvacur.att.qbn); // 直接从四元数转换到欧拉角，跳过旋转矩阵
 }

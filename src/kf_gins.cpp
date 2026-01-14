@@ -36,8 +36,8 @@
 #include "kf-gins/gi_engine.h"
 
 bool loadConfig(YAML::Node &config, GINSOptions &options);
-void writeNavResult(double time, NavState &navstate, FileSaver &navfile, FileSaver &imuerrfile, const std::string &output_mode);
-void writeSTD(double time, Eigen::MatrixXd &cov, FileSaver &stdfile, const std::string &output_mode);
+void writeNavResult(double time, NavState &navstate, FileSaver *navfile, FileSaver *imuerrfile, const std::string &output_mode);
+void writeSTD(double time, Eigen::MatrixXd &cov, FileSaver *stdfile, const std::string &output_mode);
 
 int main(int argc, char *argv[]) {
 
@@ -49,8 +49,14 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl << "KF-GINS: An EKF-Based GNSS/INS Integrated Navigation System" << std::endl << std::endl;
     auto ts = absl::Now();
 
+    // 性能分析计时变量
+    // Performance analysis timing variables
+    double config_time, engine_init_time, file_load_time, process_time, total_time;
+    auto start_total = absl::Now();
+
     // 加载配置文件
     // load configuration file
+    auto start_config = absl::Now();
     YAML::Node config;
     try {
         config = YAML::LoadFile(argv[1]);
@@ -67,6 +73,8 @@ int main(int argc, char *argv[]) {
         std::cout << "Error occurs in the configuration file!" << std::endl;
         return -1;
     }
+    auto end_config = absl::Now();
+    config_time = absl::ToDoubleSeconds(end_config - start_config);
 
     // 读取文件路径配置
     // load filepath configuration
@@ -97,7 +105,10 @@ int main(int argc, char *argv[]) {
 
     // 构造GIEngine
     // Construct GIEngine
+    auto start_engine_init = absl::Now();
     GIEngine giengine(options);
+    auto end_engine_init = absl::Now();
+    engine_init_time = absl::ToDoubleSeconds(end_engine_init - start_engine_init);
 
     // 根据输出模式决定是否创建文件对象
     // create file objects based on output mode
@@ -203,8 +214,8 @@ int main(int argc, char *argv[]) {
 
                     // 保存处理结果
                     // save processing results
-                    writeNavResult(timestamp, navstate, *navfile, *imuerrfile, options.output_mode);
-                    writeSTD(timestamp, cov, *stdfile, options.output_mode);
+                    writeNavResult(timestamp, navstate, navfile, imuerrfile, options.output_mode);
+                    writeSTD(timestamp, cov, stdfile, options.output_mode);
 
                     // 显示处理进展
                     // display processing progress
@@ -310,8 +321,8 @@ int main(int argc, char *argv[]) {
 
             // 保存处理结果
             // save processing results
-            writeNavResult(timestamp, navstate, *navfile, *imuerrfile, options.output_mode);
-            writeSTD(timestamp, cov, *stdfile, options.output_mode);
+            writeNavResult(timestamp, navstate, navfile, imuerrfile, options.output_mode);
+            writeSTD(timestamp, cov, stdfile, options.output_mode);
 
             // 显示处理进展
             // display processing progress
@@ -520,7 +531,7 @@ bool loadConfig(YAML::Node &config, GINSOptions &options) {
  * @brief 保存导航结果和IMU误差，已转换为常用单位
  *        save navigation result and imu error, converted them to common units
  * */
-void writeNavResult(double time, NavState &navstate, FileSaver &navfile, FileSaver &imuerrfile, const std::string &output_mode) {
+void writeNavResult(double time, NavState &navstate, FileSaver *navfile, FileSaver *imuerrfile, const std::string &output_mode) {
 
     std::vector<double> result;
 
@@ -540,7 +551,7 @@ void writeNavResult(double time, NavState &navstate, FileSaver &navfile, FileSav
     result.push_back(navstate.euler[2] * R2D);
 
     if (output_mode == "file") {
-        navfile.dump(result);
+        navfile->dump(result);
     } else if (output_mode == "terminal") {
         // 终端输出导航结果
         // print navigation result to terminal
@@ -575,7 +586,7 @@ void writeNavResult(double time, NavState &navstate, FileSaver &navfile, FileSav
     result.push_back(imuerr.accscale[2] * 1e6);
 
     if (output_mode == "file") {
-        imuerrfile.dump(result);
+        imuerrfile->dump(result);
     }
 }
 
@@ -583,7 +594,7 @@ void writeNavResult(double time, NavState &navstate, FileSaver &navfile, FileSav
  * @brief 保存标准差，已转换为常用单位
  *        save standard deviation, converted to common units
  * */
-void writeSTD(double time, Eigen::MatrixXd &cov, FileSaver &stdfile, const std::string &output_mode) {
+void writeSTD(double time, Eigen::MatrixXd &cov, FileSaver *stdfile, const std::string &output_mode) {
 
     std::vector<double> result;
 
@@ -611,6 +622,6 @@ void writeSTD(double time, Eigen::MatrixXd &cov, FileSaver &stdfile, const std::
     }
 
     if (output_mode == "file") {
-        stdfile.dump(result);
+        stdfile->dump(result);
     }
 }

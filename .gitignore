@@ -8,3 +8,5 @@ dataset/
 result/
 script/
 dataset/
+output/
+build_ninja/

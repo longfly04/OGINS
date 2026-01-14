@@ -353,6 +353,13 @@ private:
     Eigen::MatrixXd Cov_;
     Eigen::MatrixXd Qc_;
     Eigen::MatrixXd dx_;
+    
+    // 预分配矩阵，避免重复内存操作
+    // Pre-allocated matrices to avoid repeated memory operations
+    Eigen::MatrixXd Phi_;
+    Eigen::MatrixXd F_;
+    Eigen::MatrixXd Qd_;
+    Eigen::MatrixXd G_;
 
     // 导航结果回调函数
     // navigation result callback function
